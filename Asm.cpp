@@ -8,8 +8,9 @@
 typedef unsigned char byte;
 
 size_t CountFileSize (char* const fileName);
-char* ReadFile (size_t fileSize, FILE* file);
-size_t CountStrings (char* text, size_t textSize);
+byte* ReadFile (size_t fileSize, FILE* file);
+int VerifyByteHeader (byte* code);
+size_t CountStrings (byte* text, size_t textSize);
 byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen);
 void FWriteHeader (FILE* byteCode);
 
@@ -51,7 +52,7 @@ int main (int argc, char* argv [])
 
     size_t size = CountFileSize ((char*) "codes.txt");
     
-    char* text = ReadFile (size, textCodes);
+    byte* text = ReadFile (size, textCodes);
 
     if (text == nullptr)
     {
@@ -92,11 +93,11 @@ size_t CountFileSize (char* const fileName)
 }
 
 
-char* ReadFile (size_t fileSize, FILE* file)
+byte* ReadFile (size_t fileSize, FILE* file)
 {
     assert (file != nullptr);
 
-    char* tempText = (char*) calloc (fileSize + 1, sizeof (tempText [0]));
+    byte* tempText = (byte*) calloc (fileSize + 1, sizeof (tempText [0]));
 
     if (tempText == nullptr)
     {
@@ -104,7 +105,7 @@ char* ReadFile (size_t fileSize, FILE* file)
         return nullptr;
     }
 
-    char* text = tempText;
+    byte* text = tempText;
 
     fread (text, sizeof (text [0]), fileSize, file);
 
@@ -116,7 +117,14 @@ char* ReadFile (size_t fileSize, FILE* file)
 }
 
 
-size_t CountStrings (char* text, size_t textSize)
+int VerifyByteHeader (byte* code)
+{
+    code = code + 4;
+    return 0;
+}
+
+
+size_t CountStrings (byte* text, size_t textSize)
 {
     assert (text != nullptr);
     assert (textSize != 0);
