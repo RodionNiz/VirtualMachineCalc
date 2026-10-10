@@ -5,32 +5,14 @@
 #include <assert.h>
 #include <sys/stat.h>
 
-typedef unsigned char byte;
+#include "commands.h" //не трогать
 
 size_t CountFileSize (char* const fileName);
-byte* ReadFile (size_t fileSize, FILE* file);
-int VerifyByteHeader (byte* code);
+byte* ReadFile (size_t* fileSize, FILE* file);
 size_t CountStrings (byte* text, size_t textSize);
 byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen);
 void FWriteHeader (FILE* byteCode);
 
-
-enum funcCodes : byte
-{
-    PUSH = 0x1,
-    ADD = 0x2,
-    OUT = 0x3,
-    HLT = 0xF4
-};
-
-//TODO - изменять enum в отдельной проге
-enum funcHash 
-{
-    PUSH_HASH = 1213420880,
-    ADD_HASH = 4473921,
-    OUT_HASH = 5526863,
-    HLT_HASH = 5524552
-};
 
 //TODO битовые сруктуры
 int main (int argc, char* argv [])
@@ -52,7 +34,7 @@ int main (int argc, char* argv [])
 
     size_t size = CountFileSize ((char*) "codes.txt");
     
-    byte* text = ReadFile (size, textCodes);
+    byte* text = ReadFile (&size, textCodes);
 
     if (text == nullptr)
     {
@@ -72,6 +54,7 @@ int main (int argc, char* argv [])
     }
 
     FWriteHeader (byteCodesFile);
+    
     fwrite (byteCode, sizeof (byte), byteCodeLen, byteCodesFile);
 
     free (byteCode);
@@ -93,34 +76,27 @@ size_t CountFileSize (char* const fileName)
 }
 
 
-byte* ReadFile (size_t fileSize, FILE* file)
+byte* ReadFile (size_t* fileSize, FILE* file)
 {
     assert (file != nullptr);
 
-    byte* tempText = (byte*) calloc (fileSize + 1, sizeof (tempText [0]));
+    byte* tempText = (byte*) calloc (*fileSize + 1, sizeof (tempText [0]));
 
     if (tempText == nullptr)
     {
         printf ("reading err");
-        return nullptr;
+        abort ();
     }
 
     byte* text = tempText;
 
-    fread (text, sizeof (text [0]), fileSize, file);
+    *fileSize = fread (text, sizeof (text [0]), *fileSize, file);
 
     assert (text != nullptr);
 
-    text [fileSize] = 0;
+    text [*fileSize] = 0;
 
     return text;
-}
-
-
-int VerifyByteHeader (byte* code)
-{
-    code = code + 4;
-    return 0;
 }
 
 
@@ -226,6 +202,9 @@ void FWriteHeader (FILE* byteCode)
     byte* headerBuffer = (byte*) calloc (20, sizeof (headerBuffer [0]));
 
     int sign = 'ANDR';
+    long long int version = 'EDOC';
 
     fwrite ((char*) &sign, 1, 4, byteCode);
+    
+    fwrite ((char*) &version, 1, 4, byteCode);
 }

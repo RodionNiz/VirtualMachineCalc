@@ -5,18 +5,10 @@
 #include <string.h>
 #include <sys/stat.h>
 
-typedef unsigned char byte;
-
-enum funcCodes : byte
-{
-    PUSH = 1,
-    ADD = 2,
-    OUT = 3,
-    HLT = 0xF4
-};
+#include "commands.h" //не трогать
 
 size_t CountFileSize (char* const fileName);
-byte* ReadFile (size_t fileSize, FILE* file);
+byte* ReadFile (size_t* fileSize, FILE* file);
 void DisAsm (byte* byteCode, size_t codeLen, FILE* textCodeFile);
 
 int main (int argc, char* argv [])
@@ -38,7 +30,7 @@ int main (int argc, char* argv [])
 
     size_t filesize = CountFileSize (argv [1]);
 
-    byte* byteCode = ReadFile (filesize, byteCodeFile);
+    byte* byteCode = ReadFile (&filesize, byteCodeFile);
 
     if (byteCode == nullptr)
     {
@@ -64,25 +56,25 @@ size_t CountFileSize (char* const fileName)
 }
 
 
-byte* ReadFile (size_t fileSize, FILE* file)
+byte* ReadFile (size_t* fileSize, FILE* file)
 {
     assert (file != nullptr);
 
-    byte* tempText = (byte*) calloc (fileSize + 1, sizeof (tempText [0]));
+    byte* tempText = (byte*) calloc (*fileSize + 1, sizeof (tempText [0]));
 
     if (tempText == nullptr)
     {
         printf ("reading err");
-        return nullptr;
+        abort ();
     }
 
     byte* text = tempText;
 
-    fread (text, sizeof (text [0]), fileSize, file);
+    *fileSize = fread (text, sizeof (text [0]), *fileSize, file);
 
     assert (text != nullptr);
 
-    text [fileSize] = 0;
+    text [*fileSize] = 0;
 
     return text;
 }

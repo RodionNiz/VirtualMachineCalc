@@ -7,24 +7,24 @@
 #include <string.h>
 #include <sys/stat.h>
 
-typedef unsigned char byte;
-
-
-enum funcCodes : byte
-{
-    PUSH = 1,
-    ADD = 2,
-    OUT = 3,
-    HLT = 0xF4
-};
+#include "commands.h" //не трогать
 
 
 size_t CountFileSize (char* const fileName);
-byte* ReadFile (size_t fileSize, FILE* file);
+byte* ReadFile (size_t* fileSize, FILE* file);
+int VerifyByteHeader (byte* code);
 void ParseCommands (byte* const byteCode, size_t codeLen);
 void Push (stack_t* stk, stackElem_t elem);
 void Add (stack_t* stk);
 void Out (stack_t* stk);
+
+
+struct processor 
+{
+    size_t ip;
+    byte* code;
+    double registers [4];
+};
 
 
 int main (int argc, char* argv [])
@@ -39,7 +39,9 @@ int main (int argc, char* argv [])
 
     size_t filesize = CountFileSize (argv [1]);
 
-    byte* byteCode = ReadFile (filesize, code);
+    byte* byteCode = ReadFile (&filesize, code);
+
+    VerifyByteHeader (byteCode);
 
     ParseCommands (byteCode, filesize);
 
@@ -62,11 +64,11 @@ size_t CountFileSize (char* const fileName)
 }
 
 
-byte* ReadFile (size_t fileSize, FILE* file)
+byte* ReadFile (size_t* fileSize, FILE* file)
 {
     assert (file != nullptr);
 
-    byte* tempText = (byte*) calloc (fileSize + 1, sizeof (tempText [0]));
+    byte* tempText = (byte*) calloc (*fileSize + 1, sizeof (tempText [0]));
 
     if (tempText == nullptr)
     {
@@ -76,13 +78,20 @@ byte* ReadFile (size_t fileSize, FILE* file)
 
     byte* text = tempText;
 
-    fread (text, sizeof (text [0]), fileSize, file);
+    *fileSize = fread (text, sizeof (text [0]), *fileSize, file);
 
     assert (text != nullptr);
 
-    text [fileSize] = 0;
+    text [*fileSize] = 0;
 
     return text;
+}
+
+
+int VerifyByteHeader (byte* code)
+{
+    code = code + 4;
+    return 0;
 }
 
 
