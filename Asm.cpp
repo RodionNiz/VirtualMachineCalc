@@ -45,7 +45,6 @@ int main (int argc, char* argv [])
 
     size_t byteCodeLen = 0;
 
-    fseek (textCodes, 0, SEEK_SET); 
     byte* byteCode = ReCode (textCodes, nOfStr, &byteCodeLen);
 
     if (byteCode == nullptr)
@@ -126,10 +125,15 @@ size_t CountStrings (byte* text, size_t textSize)
     return strCount;
 }
 
-//TODO в начале файла писать структуру: 4 байта RDNA многосимвольная константа в '' = R * 256 в степени позиции, версии кодов проверять, кол-во команд, 
+//TODO в начале файла писать структуру:версии кодов проверять, кол-во команд, 
 //NOTE - заголовок 
 byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen)
 {
+    fseek (readFile, 0, SEEK_SET);
+
+    int labels [20] = {};
+    memset (labels, -1, sizeof (labels));
+
     byte* tempByteCodes = (byte*) calloc (nOfStr * 8, sizeof (byte));
 
     if (tempByteCodes == nullptr)
@@ -140,7 +144,7 @@ byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen)
 
     byte* byteCodes = tempByteCodes;
     
-    char tempCommand [6] = "";
+    char tempCommand [5] = "";
 
     //NOTE мб аргумент из тайпдефа стека
     double tempArg = 0;
@@ -154,14 +158,29 @@ byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen)
             break;
         }
 
-        if (strcmp (tempCommand, "PUSH") == 0)
+        if (*tempCommand == ':')
+        {
+            int labelNum = -1;
+
+            sscanf (tempCommand + 1, "%d", &labelNum);
+
+            assert (labelNum >= 0);
+            assert (labelNum < 20);
+
+            labels [labelNum] = codeCount;
+
+            printf("label %d = %zu", labelNum, codeCount);
+
+            i++;
+        }
+
+        else if (*(int*) tempCommand == PUSH_HASH)
         {
             byteCodes [codeCount++] = PUSH;
 
             fscanf (readFile, "%lg", &tempArg);
 
             //TODO - memcpy
-            
             *(double*) (byteCodes + codeCount) = tempArg;
 
             codeCount += sizeof (double);
@@ -169,19 +188,67 @@ byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen)
             i++;
         }
 
-        else if (strcmp (tempCommand, "ADD") == 0)
+        else if (*(int*) tempCommand == ADD_HASH)
         {
             byteCodes [codeCount++] = ADD;
         }
 
-        else if (strcmp (tempCommand, "OUT") == 0)
+        else if (*(int*) tempCommand == OUT_HASH)
         {
             byteCodes [codeCount++] = OUT;
         }
 
-        else if (strcmp (tempCommand, "HLT") == 0)
+        else if (*(int*) tempCommand == HLT_HASH)
         {
             byteCodes [codeCount++] = HLT;
+        }
+
+        else if (*(int*) tempCommand == PSHR_HASH)
+        {
+            byteCodes [codeCount++] = PSHR;
+
+            fscanf (readFile, "%s", tempCommand);
+
+            if (strcmp (tempCommand, "AX") == 0)
+            {
+                byteCodes [codeCount++] = 0x0;
+            }
+
+            else if (strcmp (tempCommand, "BX") == 0)
+            {
+                byteCodes [codeCount++] = 0x1;
+            }
+
+            else if (strcmp (tempCommand, "CX") == 0)
+            {
+                byteCodes [codeCount++] = 0x2;
+            }
+
+            else if (strcmp (tempCommand, "DX") == 0)
+            {
+                byteCodes [codeCount++] = 0x3;
+            }
+
+            i++;
+        }
+
+        else if (*(int*) tempCommand == JMP_HASH)
+        {
+            byteCodes [codeCount++] = JMP;
+
+            int labelNum = -1;
+
+            fscanf (readFile, "%d", &labelNum);
+
+            assert (labelNum >= 0);
+            assert (labelNum < 20);
+            
+            //TODO - memcpy
+            *(int*) (byteCodes + codeCount) = labels [labelNum];
+
+            codeCount += sizeof (labels [0]);
+
+            i++;
         }
 
         else
