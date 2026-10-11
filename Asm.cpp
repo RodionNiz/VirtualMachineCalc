@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <cstdlib>
 #include <stdio.h>
 #include <string.h>
@@ -10,8 +11,8 @@
 size_t CountFileSize (char* const fileName);
 byte* ReadFile (size_t* fileSize, FILE* file);
 size_t CountStrings (byte* text, size_t textSize);
-byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen);
-void FWriteHeader (FILE* byteCode);
+byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen, int* labels);
+void FWriteHeader (FILE* byteCode, size_t nOfStr);
 
 
 //TODO битовые сруктуры
@@ -45,14 +46,25 @@ int main (int argc, char* argv [])
 
     size_t byteCodeLen = 0;
 
-    byte* byteCode = ReCode (textCodes, nOfStr, &byteCodeLen);
+    int labels [20] = {};
+
+    memset (labels, -1, sizeof (labels));
+
+    byte* byteCode = ReCode (textCodes, nOfStr, &byteCodeLen, labels);
 
     if (byteCode == nullptr)
     {
         return -1;
     }
 
-    FWriteHeader (byteCodesFile);
+    FWriteHeader (byteCodesFile, nOfStr);
+
+    byteCode = ReCode (textCodes, nOfStr, &byteCodeLen, labels);
+
+    if (byteCode == nullptr)
+    {
+        return -1;
+    }
     
     fwrite (byteCode, sizeof (byte), byteCodeLen, byteCodesFile);
 
@@ -111,7 +123,10 @@ size_t CountStrings (byte* text, size_t textSize)
     {
         if (text [count] == '\n' || text [count] == ' ')
         {
-            strCount++;
+            if (text [count + 1] != ':')
+            {
+                strCount++;
+            }
         }
 
         count++;
@@ -127,12 +142,9 @@ size_t CountStrings (byte* text, size_t textSize)
 
 //TODO в начале файла писать структуру:версии кодов проверять, кол-во команд, 
 //NOTE - заголовок 
-byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen)
+byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen, int* labels)
 {
     fseek (readFile, 0, SEEK_SET);
-
-    int labels [20] = {};
-    memset (labels, -1, sizeof (labels));
 
     byte* tempByteCodes = (byte*) calloc (nOfStr * 8, sizeof (byte));
 
@@ -169,9 +181,7 @@ byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen)
 
             labels [labelNum] = codeCount;
 
-            printf("label %d = %zu", labelNum, codeCount);
-
-            i++;
+            i--;
         }
 
         else if (*(int*) tempCommand == PUSH_HASH)
@@ -264,14 +274,16 @@ byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen)
 }
 
 
-void FWriteHeader (FILE* byteCode)
+void FWriteHeader (FILE* byteCode, size_t nOfStr)
 {
     byte* headerBuffer = (byte*) calloc (20, sizeof (headerBuffer [0]));
 
     int sign = 'ANDR';
-    long long int version = 'EDOC';
+    long long int version = '1SRV';
 
     fwrite ((char*) &sign, 1, 4, byteCode);
     
     fwrite ((char*) &version, 1, 4, byteCode);
+
+    fprintf (byteCode, "%zu", nOfStr);
 }
