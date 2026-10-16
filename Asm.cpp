@@ -1,5 +1,6 @@
 #include <cstddef>
 #include <cstdlib>
+#include <cstring>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -10,8 +11,16 @@
 
 size_t CountFileSize (char* const fileName);
 byte* ReadFile (size_t* fileSize, FILE* file);
+
 size_t CountStrings (byte* text, size_t textSize);
+
 byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen, int* labels);
+
+void ParseJmp (FILE* readFile, byte* byteCodes, size_t* ip, int* labels);
+
+void ParsePop (FILE* readFile, byte* byteCodes, size_t* ip);
+void ParsePshr (FILE* readFile, byte* byteCodes, size_t* ip);
+
 void FWriteHeader (FILE* byteCode, size_t nOfStr);
 
 
@@ -29,7 +38,7 @@ int main (int argc, char* argv [])
         char writeFileName [] = "bytes.txt";
         argv [2] = writeFileName;
     }
-
+    
     FILE* textCodes = fopen (argv [1], "r");
     FILE* byteCodesFile = fopen (argv [2], "w");
 
@@ -140,8 +149,7 @@ size_t CountStrings (byte* text, size_t textSize)
     return strCount;
 }
 
-//TODO в начале файла писать структуру:версии кодов проверять, кол-во команд, 
-//NOTE - заголовок 
+
 byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen, int* labels)
 {
     fseek (readFile, 0, SEEK_SET);
@@ -163,7 +171,7 @@ byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen, int* labels)
 
     size_t codeCount = 0;
 
-    for (size_t i = 0; i < nOfStr; i++)
+    for (size_t commandNum = 0; commandNum < nOfStr; commandNum++)
     {
         if (fscanf (readFile, "%s", tempCommand) == 0)
         {
@@ -180,91 +188,132 @@ byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen, int* labels)
             assert (labelNum < 20);
 
             labels [labelNum] = codeCount;
+            printf ("%d", labels [labelNum]);
 
-            i--;
-        }
-
-        else if (*(int*) tempCommand == PUSH_HASH)
-        {
-            byteCodes [codeCount++] = PUSH;
-
-            fscanf (readFile, "%lg", &tempArg);
-
-            //TODO - memcpy
-            *(double*) (byteCodes + codeCount) = tempArg;
-
-            codeCount += sizeof (double);
-
-            i++;
-        }
-
-        else if (*(int*) tempCommand == ADD_HASH)
-        {
-            byteCodes [codeCount++] = ADD;
-        }
-
-        else if (*(int*) tempCommand == OUT_HASH)
-        {
-            byteCodes [codeCount++] = OUT;
-        }
-
-        else if (*(int*) tempCommand == HLT_HASH)
-        {
-            byteCodes [codeCount++] = HLT;
-        }
-
-        else if (*(int*) tempCommand == PSHR_HASH)
-        {
-            byteCodes [codeCount++] = PSHR;
-
-            fscanf (readFile, "%s", tempCommand);
-
-            if (strcmp (tempCommand, "AX") == 0)
-            {
-                byteCodes [codeCount++] = 0x0;
-            }
-
-            else if (strcmp (tempCommand, "BX") == 0)
-            {
-                byteCodes [codeCount++] = 0x1;
-            }
-
-            else if (strcmp (tempCommand, "CX") == 0)
-            {
-                byteCodes [codeCount++] = 0x2;
-            }
-
-            else if (strcmp (tempCommand, "DX") == 0)
-            {
-                byteCodes [codeCount++] = 0x3;
-            }
-
-            i++;
-        }
-
-        else if (*(int*) tempCommand == JMP_HASH)
-        {
-            byteCodes [codeCount++] = JMP;
-
-            int labelNum = -1;
-
-            fscanf (readFile, "%d", &labelNum);
-
-            assert (labelNum >= 0);
-            assert (labelNum < 20);
-            
-            //TODO - memcpy
-            *(int*) (byteCodes + codeCount) = labels [labelNum];
-
-            codeCount += sizeof (labels [0]);
-
-            i++;
+            commandNum--;
         }
 
         else
         {
-            printf ("Syntaxes error! Compilation failed!\n");
-            return nullptr;
+            switch (*(int*) tempCommand)
+            {
+                case PUSH_HASH:
+                {
+                    byteCodes [codeCount++] = PUSH;
+                    fscanf (readFile, "%lg", &tempArg);
+                    //TODO - memcpy
+                    *(double*) (byteCodes + codeCount) = tempArg;
+                    codeCount += sizeof (double);
+
+                    commandNum++;
+                }
+
+                case ADD_HASH:
+                {
+                    byteCodes [codeCount++] = ADD;
+                    break;
+                }
+
+                case MULT_HASH:
+                {
+                    byteCodes [codeCount++] = MULT;
+                    break;
+                }
+
+                case DIV_HASH:
+                {
+                    byteCodes [codeCount++] = DIV;
+                    break;
+                }
+
+                case OUT_HASH:
+                {
+                    byteCodes [codeCount++] = OUT;
+                    break;
+                }
+
+                case HLT_HASH:
+                {
+                    byteCodes [codeCount++] = HLT;
+                    break;
+                }
+
+                case PSHR_HASH:
+                {
+                    ParsePshr (readFile, byteCodes, &codeCount);
+                    commandNum++;
+                    break;
+                }
+
+                case POP_HASH:
+                {
+                    ParsePop (readFile, byteCodes, &codeCount);
+                    commandNum++;
+                    break;
+                }
+
+                case JA_HASH: 
+                {
+                    byteCodes [codeCount++] = JA;
+                    ParseJmp (readFile, byteCodes, &codeCount, labels);
+                    commandNum++;
+                    break;
+                }
+
+                case JAE_HASH: 
+                {
+                    byteCodes [codeCount++] = JAE;
+                    ParseJmp (readFile, byteCodes, &codeCount, labels);
+                    commandNum++;
+                    break;
+                }
+
+                case JB_HASH: 
+                {
+                    byteCodes [codeCount++] = JB;
+                    ParseJmp (readFile, byteCodes, &codeCount, labels);
+                    commandNum++;
+                    break;
+                }
+
+                case JBE_HASH: 
+                {
+                    byteCodes [codeCount++] = JBE;
+                    ParseJmp (readFile, byteCodes, &codeCount, labels);
+                    commandNum++;
+                    break;
+                }
+
+                case JE_HASH: 
+                {
+                    byteCodes [codeCount++] = JE;
+                    ParseJmp (readFile, byteCodes, &codeCount, labels);
+                    commandNum++;
+                    break;
+                }
+
+                case JNE_HASH: 
+                {
+                    byteCodes [codeCount++] = JNE;
+                    ParseJmp (readFile, byteCodes, &codeCount, labels);
+                    commandNum++;
+                    break;
+                }
+
+                case JMP_HASH: 
+                {
+                    byteCodes [codeCount++] = JMP;
+                    ParseJmp (readFile, byteCodes, &codeCount, labels);
+                    commandNum++;
+                    break;
+                }
+
+                default:
+                {
+                    printf ("Syntaxes error! Compilation failed! %d\n", *(int*) tempCommand);
+                    return nullptr;
+                }
+            }
         }
     }
 
@@ -274,16 +323,99 @@ byte* ReCode (FILE* readFile, size_t nOfStr, size_t* codelen, int* labels)
 }
 
 
+void ParseJmp (FILE* readFile, byte* byteCodes, size_t* ip, int* labels)
+{
+    int labelNum = -1;
+
+    fscanf (readFile, "%d", &labelNum);
+
+    assert (labelNum >= 0);
+    assert (labelNum < 20);
+    
+    memcpy(byteCodes + *ip, labels + labelNum, sizeof (labels [0]));
+
+    *ip += sizeof (labels [0]);
+}
+
+
+void ParsePop (FILE* readFile, byte* byteCodes, size_t* ip)
+{
+    byteCodes [*ip] = POP;
+    ++*ip;
+
+    char tempCommand [5] = "";
+
+    fscanf (readFile, "%s", tempCommand);
+
+    if (strcmp (tempCommand, "AX") == 0)
+    {
+        byteCodes [*ip] = 0x0;
+    }
+
+    else if (strcmp (tempCommand, "BX") == 0)
+    {
+        byteCodes [*ip] = 0x1;
+    }
+
+    else if (strcmp (tempCommand, "CX") == 0)
+    {
+        byteCodes [*ip] = 0x2;
+    }
+
+    else if (strcmp (tempCommand, "DX") == 0)
+    {
+        byteCodes [*ip] = 0x3;
+    }
+
+    ++*ip;
+}
+
+
+void ParsePshr (FILE* readFile, byte* byteCodes, size_t* ip)
+{
+    byteCodes [*ip] = PSHR;
+    ++*ip;
+
+    char tempCommand [5] = "";
+
+    fscanf (readFile, "%s", tempCommand);
+
+    if (strcmp (tempCommand, "AX") == 0)
+    {
+        byteCodes [*ip] = 0x0;
+    }
+
+    else if (strcmp (tempCommand, "BX") == 0)
+    {
+        byteCodes [*ip] = 0x1;
+    }
+
+    else if (strcmp (tempCommand, "CX") == 0)
+    {
+        byteCodes [*ip] = 0x2;
+    }
+
+    else if (strcmp (tempCommand, "DX") == 0)
+    {
+        byteCodes [*ip] = 0x3;
+    }
+
+    ++*ip;
+}
+
+
 void FWriteHeader (FILE* byteCode, size_t nOfStr)
 {
     byte* headerBuffer = (byte*) calloc (20, sizeof (headerBuffer [0]));
 
     int sign = 'ANDR';
-    long long int version = '1SRV';
+    long long int version = 'SREV';
 
     fwrite ((char*) &sign, 1, 4, byteCode);
     
     fwrite ((char*) &version, 1, 4, byteCode);
 
-    fprintf (byteCode, "%zu", nOfStr);
+    fwrite ((char*) &GLOBAL_CODES_VERSION, 1, 8, byteCode);
+
+    fwrite ((char*) &nOfStr, 1, 8, byteCode);
 }
