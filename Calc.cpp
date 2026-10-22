@@ -1,6 +1,11 @@
 #include "calc.h"
 #include "stack.h"
+#include "raylib/raylib.h"
 #include "stack.cpp"
+
+const int screenWidth = 1500;
+const int screenHeight = 900;
+size_t GLOBAL_VRAM_SIZE = 1500;
 
 int main (int argc, char* argv [])
 {
@@ -9,6 +14,10 @@ int main (int argc, char* argv [])
         printf ("No file name");
         return 0;
     }
+
+    InitWindow(screenWidth, screenHeight, "raylib [core] example - delta time");
+
+    Show();
 
     const char* fileName = nullptr;
     if (argv [1] != nullptr) fileName = argv [1];
@@ -29,7 +38,12 @@ int main (int argc, char* argv [])
     }
 
     Spu.byteCode += signSize;
-    ParseCommands (Spu);
+    EvalCommands (&Spu);
+
+    while (!WindowShouldClose())
+    {  
+    }
+    CloseWindow();
 
     printf ("program finished correctly\n");
     fclose (code);
@@ -44,6 +58,14 @@ int SpuCtor (processor* SPU, const char* codeName, FILE* code)
 
     SPU->codeLen = CountFileSize (codeName);
     SPU->byteCode = ReadFile (&SPU->codeLen, code);
+
+    byte* tempVram = (byte*) calloc (GLOBAL_VRAM_SIZE, sizeof (tempVram [0]));
+    {
+        printf ("vram allocation err\n");
+        return 1;
+    }
+
+    SPU->Vram = tempVram;
     return 0;
 }
 
@@ -65,7 +87,7 @@ byte* ReadFile (size_t* fileSize, FILE* file)
     byte* tempText = (byte*) calloc (*fileSize + 1, sizeof (tempText [0]));
     if (tempText == nullptr)
     {
-        printf ("reading err");
+        printf ("reading err\n");
         return nullptr;
     }
 
@@ -103,74 +125,27 @@ size_t VerifySign (byte* byteCode, size_t* signSize, size_t* nOfStr)
 }
 
 
-void ParseCommands (processor Spu)
+void EvalCommands (processor* Spu)
 {
-    Spu.ip = 0;
-    Command ComList [] = {&Push, &Pshr, &Pop, &Add, &Mult, &Div, &Sqrt, &Out};
+    Spu->ip = 0;
+    Command ComList [] = {&Push, &Pshr, &Pop, &Add, &Mult, &Div, &Sqrt, &Out, &Jmp, &Branch, &Call, &Ret};
 
-    while (Spu.ip < Spu.codeLen)
+    while (Spu->ip < Spu->codeLen)
     {
-        if (Spu.byteCode [Spu.ip] <= OUT)
-        {
-            ComList [Spu.byteCode [Spu.ip] - 1] (&Spu);
-        }
+        byte cmd = Spu->byteCode [Spu->ip];
+
+        if      (cmd <= JMP)                 ComList [cmd - 1]         (Spu);
+        else if (cmd >  JMP  && cmd <  CALL) ComList [JMP]             (Spu); //под номером JMP лежит Branch
+        else if (cmd >= CALL && cmd != HLT)  ComList [JMP + cmd - JNE] (Spu);
+        else if (cmd == HLT)                 return;
 
         else
         {
-            switch (Spu.byteCode [Spu.ip])
-            {
-                case HLT:
-                {
-                    StackDestroyCall(Spu.valueStack);
-                    return;
-                }
-
-                case JMP:
-                {
-                    Jmp (&Spu);
-                    break;
-                }
-
-                case JA:
-                case JB:
-                case JAE:
-                case JBE:
-                case JE:
-                case JNE:
-                    if (CmpForJmp (&Spu.valueStack, Spu.byteCode [Spu.ip]))
-                        Jmp (&Spu);
-                    else
-                        Spu.ip += sizeof (int);
-                    break;
-                
-
-                case CALL:
-                {
-                    StackPushCall(Spu.returnAddress, Spu.ip + sizeof (int) + 1);
-                    Jmp (&Spu);
-                    break;
-                }
-
-                case RET:
-                {
-                    stackElem_t backAddres = 0;
-                    StackPopCall(Spu.returnAddress, backAddres)
-                    Spu.ip = (size_t) backAddres - 1;
-                    break;
-                }
-            
-                default:
-                {
-                    printf ("Invalid byte code, ip = %zu, code = %d\n", Spu.ip, Spu.byteCode [Spu.ip]);
-
-                    StackDestroyCall(Spu.valueStack);
-                    free (Spu.byteCode);
-                    return;
-                }
-            }
+            printf ("Invalid byte code, ip = %zu, code = %d\n", Spu->ip, Spu->byteCode [Spu->ip]);
+            return;
         }
 
-        Spu.ip++;
+        Spu->ip++;
     }
 }
 
@@ -290,6 +265,33 @@ void Pshr (processor* Spu)
 }
 
 
+void Branch (processor* Spu)
+{
+    if (CmpForJmp (&Spu->valueStack, Spu->byteCode [Spu->ip]))
+        Jmp (Spu);
+    else
+        Spu->ip += sizeof (int);
+}
+
+
+void Call (processor* Spu)
+{
+    StackPushCall(Spu->returnAddress, Spu->ip + sizeof (int) + 1);
+    Jmp (Spu);
+}
+
+
+void Ret (processor* Spu)
+{
+    stackElem_t backAddres = 0;
+    StackPopCall(Spu->returnAddress, backAddres)
+    Spu->ip = (size_t) backAddres - 1;
+}
+
+
+//TODO - spu destroy
+
+
 int CmpForJmp (stack_t* stk, byte jmpType)
 {
     ASSERT_STK_OK (stk, __LINE__)
@@ -314,4 +316,31 @@ int CmpForJmp (stack_t* stk, byte jmpType)
     }
 
     return 0;
+}
+
+
+void Show (byte* Vram)
+{
+    int pixInSquare = 10;
+
+    BeginDrawing();
+    ClearBackground(RAYWHITE);
+
+    int maxX = screenWidth / pixInSquare;
+    int maxY = screenHeight / pixInSquare;
+
+    Color squareColor = {.r = 255, .g = 255, .b = 255, .a = 255};
+
+    for (int y = 0; y < maxY; y++)
+    {
+        for (int x = 0; x < maxX; x++)
+        {
+            unsigned char tempColor = *(Vram + y * maxX + x);
+            squareColor = {.r = tempColor, .g = tempColor, .b = tempColor};
+
+            DrawRectangle(x, y, pixInSquare, pixInSquare, squareColor);
+        }
+    }
+
+    EndDrawing();
 }

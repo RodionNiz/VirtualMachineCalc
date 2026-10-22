@@ -16,7 +16,7 @@ struct processor
     stackElem_t registers [4];
     stack_t returnAddress;
     stack_t valueStack;
-    byte* Vram [1500];
+    byte* Vram;
 };
 
 
@@ -36,7 +36,7 @@ int SpuCtor (processor* SPU, const char* codeName, FILE* code);
 size_t CountFileSize (const char* fileName);
 byte* ReadFile (size_t* fileSize, FILE* file);
 size_t VerifySign (byte* byteCode, size_t* signSize, size_t* nOfStr);
-void ParseCommands (processor ProcessorStat);
+void EvalCommands (processor* ProcessorStat);
 void Push   (processor* Spu);
 void Add    (processor* Spu);
 void Mult   (processor* Spu);
@@ -46,6 +46,11 @@ void Out    (processor* Spu);
 void Pop    (processor* Spu);
 void Pshr   (processor* Spu);
 void Jmp    (processor* Spu);
+void Branch (processor* Spu);
+void Call   (processor* Spu);
+void Ret    (processor* Spu);
 int CmpForJmp (stack_t* stk, byte jmpType);
+
+void Show ();
 
 int CmpForJmpf (stack_t* stk, CMP_TYPE(char* line));
