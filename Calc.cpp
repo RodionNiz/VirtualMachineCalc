@@ -2,10 +2,9 @@
 #include "stack.h"
 #include "raylib/raylib.h"
 #include "stack.cpp"
+#include <cstdio>
 
-const int screenWidth = 1500;
-const int screenHeight = 900;
-size_t GLOBAL_VRAM_SIZE = 1500;
+const int GLOBAL_VRAM_SIZE = 6000;
 
 int main (int argc, char* argv [])
 {
@@ -14,59 +13,64 @@ int main (int argc, char* argv [])
         printf ("No file name");
         return 0;
     }
-
-    InitWindow(screenWidth, screenHeight, "raylib [core] example - delta time");
-
-    Show();
-
     const char* fileName = nullptr;
     if (argv [1] != nullptr) fileName = argv [1];
     else                     fileName = "bytes.bin";
 
-    FILE* code = fopen (fileName, "r");
-
     processor Spu = {};
-    SpuCtor (&Spu, fileName, code);
+    SpuCtor (&Spu, fileName);
+
+    EvalCommands (&Spu);
+
+    SpuDestroy (&Spu);
+    printf ("program finished correctly\n");
+}
+
+
+int SpuCtor (processor* Spu, const char* codeName)
+{
+    StackCtorCall(Spu->returnAddress, 4)
+    StackCtorCall(Spu->valueStack, 4)
+
+    FILE* code = fopen (codeName, "r");
+    Spu->codeLen = CountFileSize (codeName);
+    Spu->RawData = ReadFile (&Spu->codeLen, code);
+    fclose (code);
 
     size_t signSize = 0;
     size_t nOfStr = 0;
-
-    if (VerifySign (Spu.byteCode, &signSize, &nOfStr))
+    if (VerifySign (Spu->RawData, &signSize, &nOfStr))
     {
         printf ("invalid sign\n");
+        free (Spu->RawData);
+        StackDestroyCall(Spu->valueStack)
+        StackDestroyCall(Spu->returnAddress)
         return 1;
     }
-
-    Spu.byteCode += signSize;
-    EvalCommands (&Spu);
-
-    while (!WindowShouldClose())
-    {  
-    }
-    CloseWindow();
-
-    printf ("program finished correctly\n");
-    fclose (code);
-    free (Spu.byteCode -= signSize);
-}
-
-//TODO - filename load program
-int SpuCtor (processor* SPU, const char* codeName, FILE* code)
-{
-    StackCtorCall(SPU->returnAddress, 4)
-    StackCtorCall(SPU->valueStack, 4)
-
-    SPU->codeLen = CountFileSize (codeName);
-    SPU->byteCode = ReadFile (&SPU->codeLen, code);
+    Spu->byteCode = Spu->RawData + signSize;
 
     byte* tempVram = (byte*) calloc (GLOBAL_VRAM_SIZE, sizeof (tempVram [0]));
+    if (tempVram == nullptr)
     {
         printf ("vram allocation err\n");
+        free (Spu->RawData);
+        StackDestroyCall(Spu->valueStack)
+        StackDestroyCall(Spu->returnAddress)
         return 1;
     }
+    Spu->Vram = tempVram;
 
-    SPU->Vram = tempVram;
     return 0;
+}
+
+
+void SpuDestroy (processor* Spu)
+{
+    free (Spu->Vram);
+    free (Spu->RawData);
+
+    StackDestroyCall(Spu->valueStack);
+    StackDestroyCall(Spu->returnAddress);
 }
 
 
@@ -84,17 +88,14 @@ byte* ReadFile (size_t* fileSize, FILE* file)
 {
     assert (file != nullptr);
 
-    byte* tempText = (byte*) calloc (*fileSize + 1, sizeof (tempText [0]));
-    if (tempText == nullptr)
+    byte* text = (byte*) calloc (*fileSize + 1, sizeof (text [0]));
+    if (text == nullptr)
     {
         printf ("reading err\n");
         return nullptr;
     }
 
-    byte* text = tempText;
-
     *fileSize = fread (text, sizeof (text [0]), *fileSize, file);
-
     text [*fileSize] = 0;
 
     return text;
@@ -128,17 +129,18 @@ size_t VerifySign (byte* byteCode, size_t* signSize, size_t* nOfStr)
 void EvalCommands (processor* Spu)
 {
     Spu->ip = 0;
-    Command ComList [] = {&Push, &Pshr, &Pop, &Add, &Mult, &Div, &Sqrt, &Out, &Jmp, &Branch, &Call, &Ret};
+    Command ComList [] = {&Push, &Pshr, &Pop, &Add, &Mult, &Div, &Sqrt, &Out, &Jmp, &Branch, &Call, &Ret, &Show, &Pshv, &Popv};
 
     while (Spu->ip < Spu->codeLen)
     {
         byte cmd = Spu->byteCode [Spu->ip];
-
         if      (cmd <= JMP)                 ComList [cmd - 1]         (Spu);
         else if (cmd >  JMP  && cmd <  CALL) ComList [JMP]             (Spu); //под номером JMP лежит Branch
         else if (cmd >= CALL && cmd != HLT)  ComList [JMP + cmd - JNE] (Spu);
-        else if (cmd == HLT)                 return;
-
+        else if (cmd == HLT)
+        {
+            return;
+        }
         else
         {
             printf ("Invalid byte code, ip = %zu, code = %d\n", Spu->ip, Spu->byteCode [Spu->ip]);
@@ -153,16 +155,19 @@ void EvalCommands (processor* Spu)
 void Push (processor* Spu)
 {
     stackElem_t arg = *(stackElem_t*) (Spu->byteCode + Spu->ip + 1);
-
     StackPushCall(Spu->valueStack, arg)
-    Spu->ip += sizeof (stackElem_t);
+    Spu->ip += sizeof (arg);
 }
 
 
 void Add (processor* Spu)
 {
     ASSERT_STK_OK (&(Spu->valueStack), __LINE__)
-    assert (Spu->valueStack.size > 1);
+    if (Spu->valueStack.size <= 1)
+    {
+        printf ("Add is impossible\n");
+        return;
+    }
 
     stackElem_t first = GLOBAL_STACK_POISON;
     stackElem_t second = GLOBAL_STACK_POISON;
@@ -177,7 +182,11 @@ void Add (processor* Spu)
 void Mult (processor* Spu)
 {
     ASSERT_STK_OK (&(Spu->valueStack), __LINE__)
-    assert (Spu->valueStack.size > 1);
+    if (Spu->valueStack.size <= 1)
+    {
+        printf ("Mult is impossible\n");
+        return;
+    }
     
     stackElem_t first = GLOBAL_STACK_POISON;
     stackElem_t second = GLOBAL_STACK_POISON;
@@ -192,7 +201,11 @@ void Mult (processor* Spu)
 void Div (processor* Spu)
 {
     ASSERT_STK_OK (&(Spu->valueStack), __LINE__)
-    assert (Spu->valueStack.size > 1);
+    if (Spu->valueStack.size <= 1)
+    {
+        printf ("Div is impossible\n");
+        return;
+    }
     
     stackElem_t first = GLOBAL_STACK_POISON;
     stackElem_t second = GLOBAL_STACK_POISON;
@@ -207,12 +220,14 @@ void Div (processor* Spu)
 void Sqrt (processor* Spu)
 {
     ASSERT_STK_OK (&(Spu->valueStack), __LINE__)
-    assert (Spu->valueStack.size > 0);
+    if (Spu->valueStack.size == 0)
+    {
+        printf ("Sqrt is impossible\n");
+        return;
+    }
     
     stackElem_t first = GLOBAL_STACK_POISON;
-
     StackPopCall(Spu->valueStack, first);
-
     StackPushCall(Spu->valueStack, sqrt (first));
 }
 
@@ -220,12 +235,14 @@ void Sqrt (processor* Spu)
 void Out (processor* Spu)
 {
     ASSERT_STK_OK (&(Spu->valueStack), __LINE__)
-    assert (Spu->valueStack.size > 0);
+    if (Spu->valueStack.size == 0)
+    {
+        printf ("Out is impossible\n");
+        return;
+    }
 
     stackElem_t answer = GLOBAL_STACK_POISON;
-
     StackPopCall(Spu->valueStack, answer);
-
     printf ("Your answer is: " PRINT_TYPE "\n", answer);
 }
 
@@ -240,13 +257,15 @@ void Jmp (processor* Spu)
 void Pop (processor* Spu)
 {
     ASSERT_STK_OK (&(Spu->valueStack), __LINE__)
-    assert (Spu->valueStack.size > 0);
+    if (Spu->valueStack.size == 0)
+    {
+        printf ("Pop is impossible\n");
+        return;
+    }
 
-    stackElem_t popped = 0;
+    stackElem_t popped = GLOBAL_STACK_POISON;
     StackPopCall(Spu->valueStack, popped);
-
     byte arg = *(Spu->byteCode + Spu->ip + 1);
-
     Spu->registers [arg] = popped;
     Spu->ip++;
 }
@@ -257,9 +276,7 @@ void Pshr (processor* Spu)
     ASSERT_STK_OK (&(Spu->valueStack), __LINE__)
 
     byte arg = *(Spu->byteCode + Spu->ip + 1);
-
     stackElem_t regValue = Spu->registers [arg];
-
     StackPushCall(Spu->valueStack, regValue);
     Spu->ip++;
 }
@@ -276,6 +293,8 @@ void Branch (processor* Spu)
 
 void Call (processor* Spu)
 {
+    ASSERT_STK_OK (&(Spu->valueStack), __LINE__)
+
     StackPushCall(Spu->returnAddress, Spu->ip + sizeof (int) + 1);
     Jmp (Spu);
 }
@@ -283,13 +302,55 @@ void Call (processor* Spu)
 
 void Ret (processor* Spu)
 {
-    stackElem_t backAddres = 0;
+    ASSERT_STK_OK (&(Spu->valueStack), __LINE__)
+
+    stackElem_t backAddres = GLOBAL_STACK_POISON;
     StackPopCall(Spu->returnAddress, backAddres)
     Spu->ip = (size_t) backAddres - 1;
 }
 
 
-//TODO - spu destroy
+void Pshv (processor* Spu)
+{
+    ASSERT_STK_OK (&(Spu->valueStack), __LINE__)
+
+    byte arg = *(Spu->byteCode + Spu->ip + 1);
+
+    int vramIndex = (int)(Spu->registers [arg]);
+    if (vramIndex >= GLOBAL_VRAM_SIZE)
+    {
+        printf ("Invalid vram address\n");
+        return;
+    }
+    stackElem_t memValue = (stackElem_t) *(Spu->Vram + vramIndex);
+    StackPushCall(Spu->valueStack, memValue);
+
+    Spu->ip += sizeof (arg);
+}
+
+
+void Popv (processor* Spu)
+{
+    ASSERT_STK_OK (&(Spu->valueStack), __LINE__)
+    if (Spu->valueStack.size == 0)
+    {
+        printf ("Popv is impossible\n");
+        return;
+    }
+
+    byte arg = *(Spu->byteCode + Spu->ip + 1);
+    int vramIndex = (int)(Spu->registers [arg]);
+    if (vramIndex >= GLOBAL_VRAM_SIZE)
+    {
+        printf ("Invalid vram address\n");
+        return;
+    }
+    stackElem_t popped = GLOBAL_STACK_POISON;
+    StackPopCall(Spu->valueStack, popped)
+    Spu->Vram [vramIndex] = (byte) popped;
+
+    Spu->ip += sizeof (arg);
+}
 
 
 int CmpForJmp (stack_t* stk, byte jmpType)
@@ -297,19 +358,20 @@ int CmpForJmp (stack_t* stk, byte jmpType)
     ASSERT_STK_OK (stk, __LINE__)
     assert (stk->size > 1);
 
-    stackElem_t last = GLOBAL_STACK_POISON;
-    stackElem_t previous = GLOBAL_STACK_POISON;
+    stackElem_t first = GLOBAL_STACK_POISON;
+    stackElem_t second = GLOBAL_STACK_POISON;
 
-    StackPopCall(*stk, last);
-    StackPopCall(*stk, previous);
+    StackPopCall(*stk, first);
+    StackPopCall(*stk, second);
 
     switch (jmpType)
     {
-        case JA:  return (last > previous);
-        case JAE: return (last > previous || fabs (last - previous) < ACURACY);
-        case JB:  return (last < previous);
-        case JBE: return (last < previous || fabs (last - previous) < ACURACY);
-        case JNE: return (fabs (last - previous) > ACURACY);
+        case JA:  return (first > second);
+        case JAE: return (first > second || fabs (first - second) < ACURACY);
+        case JB:  return (first < second);
+        case JBE: return (first < second || fabs (first - second) < ACURACY);
+        case JE:  return (fabs (first - second) < ACURACY);
+        case JNE: return (fabs (first - second) >= ACURACY);
         default: 
             printf ("unsupported jmp type, %d\n", __LINE__);
             return 0;
@@ -319,28 +381,36 @@ int CmpForJmp (stack_t* stk, byte jmpType)
 }
 
 
-void Show (byte* Vram)
+void Show (processor* Spu)
 {
+    const int screenWidth = 1000;
+    const int screenHeight = 600;
+
     int pixInSquare = 10;
 
-    BeginDrawing();
-    ClearBackground(RAYWHITE);
+    InitWindow(screenWidth, screenHeight, "circle");
 
-    int maxX = screenWidth / pixInSquare;
-    int maxY = screenHeight / pixInSquare;
+    while (!WindowShouldClose())
+    {  
+        BeginDrawing();
+        ClearBackground(RAYWHITE);
 
-    Color squareColor = {.r = 255, .g = 255, .b = 255, .a = 255};
+        Color squareColor = {.r = 255, .g = 255, .b = 255, .a = 255};
 
-    for (int y = 0; y < maxY; y++)
-    {
-        for (int x = 0; x < maxX; x++)
+        DrawRectangle(10 * pixInSquare, 0 * pixInSquare, pixInSquare, pixInSquare, squareColor);
+
+        int maxX = screenWidth / pixInSquare;
+        int maxY = screenHeight / pixInSquare;
+        for (int y = 0; y < maxY; y++)
         {
-            unsigned char tempColor = *(Vram + y * maxX + x);
-            squareColor = {.r = tempColor, .g = tempColor, .b = tempColor};
-
-            DrawRectangle(x, y, pixInSquare, pixInSquare, squareColor);
+            for (int x = 0; x < maxX; x++)
+            {
+                unsigned char tempColor = 255 - *(Spu->Vram + y * maxX + x);
+                squareColor = {.r = tempColor, .g = tempColor, .b = tempColor, .a = 255};
+                DrawRectangle(x * pixInSquare, y * pixInSquare, pixInSquare, pixInSquare, squareColor);
+            }
         }
+        EndDrawing();
     }
-
-    EndDrawing();
+    CloseWindow();
 }

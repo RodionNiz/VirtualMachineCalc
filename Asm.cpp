@@ -139,7 +139,6 @@ byte* Translate (FILE* readFile, size_t nOfStr, size_t* codelen, int* labels)
     char tempCommand [MAXCOMMANDLEN] = "";
 
     size_t codeCount = 0;
-
     for (size_t commandNum = 0; commandNum < nOfStr; commandNum++)
     {
         if (fscanf (readFile, "%s", tempCommand) == 0) break;
@@ -183,6 +182,9 @@ byte* Translate (FILE* readFile, size_t nOfStr, size_t* codelen, int* labels)
                 CommandCase(JMP,    HAVE_LBL_ARG);
                 CommandCase(CALL,   HAVE_LBL_ARG);
                 CommandCase(RET,);
+                CommandCase(SHOW,);
+                CommandCase(PSHV,   HAVE_REG_ARG);
+                CommandCase(POPV,   HAVE_REG_ARG);
 
                 default:
                 {

@@ -12,8 +12,9 @@ struct processor
 {
     size_t ip;
     byte* byteCode;
+    byte* RawData;
     size_t codeLen;
-    stackElem_t registers [4];
+    stackElem_t registers [6];
     stack_t returnAddress;
     stack_t valueStack;
     byte* Vram;
@@ -32,7 +33,9 @@ typedef void (*Command) (processor* Spu);
 
 #define CMP_TYPE(...) __VA_ARGS__
 
-int SpuCtor (processor* SPU, const char* codeName, FILE* code);
+int SpuCtor (processor* Spu, const char* codeName);
+void SpuDestroy (processor* Spu);
+
 size_t CountFileSize (const char* fileName);
 byte* ReadFile (size_t* fileSize, FILE* file);
 size_t VerifySign (byte* byteCode, size_t* signSize, size_t* nOfStr);
@@ -51,6 +54,8 @@ void Call   (processor* Spu);
 void Ret    (processor* Spu);
 int CmpForJmp (stack_t* stk, byte jmpType);
 
-void Show ();
+void Show (processor* Spu);
+void Pshv (processor* Spu);
+void Popv (processor* Spu);
 
 int CmpForJmpf (stack_t* stk, CMP_TYPE(char* line));
