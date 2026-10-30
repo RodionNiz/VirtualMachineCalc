@@ -28,34 +28,50 @@ enum VerifyErr : size_t
     NofCommandsErr = 2
 };
 
-
 typedef void (*Command) (processor* Spu);
+Command* GLOBAL_COM_LIST = nullptr;
 
-#define CMP_TYPE(...) __VA_ARGS__
-
-int SpuCtor (processor* Spu, const char* codeName);
+int SpuCtor     (processor* Spu, const char* codeName);
 void SpuDestroy (processor* Spu);
 
 size_t CountFileSize (const char* fileName);
-byte* ReadFile (size_t* fileSize, FILE* file);
-size_t VerifySign (byte* byteCode, size_t* signSize, size_t* nOfStr);
-void EvalCommands (processor* ProcessorStat);
-void Push   (processor* Spu);
-void Add    (processor* Spu);
-void Mult   (processor* Spu);
-void Div    (processor* Spu);
-void Sqrt   (processor* Spu);
-void Out    (processor* Spu);
-void Pop    (processor* Spu);
-void Pshr   (processor* Spu);
-void Jmp    (processor* Spu);
-void Branch (processor* Spu);
-void Call   (processor* Spu);
-void Ret    (processor* Spu);
+byte* ReadFile       (size_t* fileSize, FILE* file);
+size_t VerifySign    (byte* byteCode, size_t* signSize, size_t* nOfStr);
+
+void InitFuncAdrArr  ();
+void EvalCommands    (processor* ProcessorStat);
+
+void PUSH_f   (processor* Spu);
+void ADD_f    (processor* Spu);
+void MULT_f   (processor* Spu);
+void DIV_f    (processor* Spu);
+void SQRT_f   (processor* Spu);
+void OUT_f    (processor* Spu);
+void POP_f    (processor* Spu);
+void JMP_f    (processor* Spu);
+void Branch   (processor* Spu);
+void CALL_f   (processor* Spu);
+void RET_f    (processor* Spu);
+void INPT_f   (processor* Spu);
+void SHOW_f   (processor* Spu);
+
 int CmpForJmp (stack_t* stk, byte jmpType);
 
-void Show (processor* Spu);
-void Pshv (processor* Spu);
-void Popv (processor* Spu);
+#define StdFuncAddr(cmd)\
+    if ((cmd) >= HLT)\
+    {\
+        printf ("%s code too big, max code is %d", #cmd, HLT);\
+        return;\
+    }\
+    GLOBAL_COM_LIST [(cmd)] = & cmd ## _f;
 
-int CmpForJmpf (stack_t* stk, CMP_TYPE(char* line));
+#define CustomFuncAddr(cmd, ...)\
+    if ((cmd) >= HLT)\
+    {\
+        printf ("%s code too big, max code is %d", #cmd, HLT);\
+        return;\
+    }\
+    GLOBAL_COM_LIST [(cmd)] = __VA_ARGS__;
+
+
+    

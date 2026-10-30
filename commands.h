@@ -1,0 +1,50 @@
+typedef unsigned char byte;
+
+long long int GLOBAL_CODES_VERSION = 1014;
+
+enum funcCodes : byte
+{
+	PUSH = 1,
+	POP = 2,
+	ADD = 3,
+	MULT = 4,
+	DIV = 5,
+	SQRT = 6,
+	OUT = 7,
+	JMP = 8,
+	JA = 9,
+	JAE = 10,
+	JB = 11,
+	JBE = 12,
+	JE = 13,
+	JNE = 14,
+	CALL = 15,
+	RET = 16,
+	SHOW = 17,
+	INPT = 18,
+	HLT = 0xF4,
+};
+
+enum funcHash
+{
+	PUSH_HASH = 1213420880,
+	POP_HASH = 5263184,
+	ADD_HASH = 4473921,
+	MULT_HASH = 1414288717,
+	DIV_HASH = 5654852,
+	SQRT_HASH = 1414680915,
+	OUT_HASH = 5526863,
+	JMP_HASH = 5262666,
+	JA_HASH = 16714,
+	JAE_HASH = 4538698,
+	JB_HASH = 16970,
+	JBE_HASH = 4538954,
+	JE_HASH = 17738,
+	JNE_HASH = 4542026,
+	CALL_HASH = 1280065859,
+	RET_HASH = 5522770,
+	SHOW_HASH = 1464813651,
+	INPT_HASH = 1414549065,
+	HLT_HASH = 5524552,
+};
+
