@@ -12,7 +12,7 @@ int main (int argc, char* argv [])
     processor Spu = {};
     SpuCtor (&Spu, fileName);
 
-    InitFuncAddress ();
+    InitFuncAdrArr ();
     EvalCommands (&Spu);
 
     SpuDestroy (&Spu);
@@ -132,7 +132,7 @@ size_t VerifySign (byte* byteCode, size_t* signSize, size_t* nOfStr)
 }
 
 
-void InitFuncAddress ()
+void InitFuncAdrArr ()
 {
     GLOBAL_COM_LIST = (Command*) calloc (HLT + 1, sizeof (GLOBAL_COM_LIST[0]));
     if (GLOBAL_COM_LIST == nullptr)
@@ -314,6 +314,11 @@ void JMP_f (processor* Spu)
 void POP_f (processor* Spu)
 {
     ASSERT_STK_OK (&(Spu->valueStack), __LINE__)
+    if (Spu->valueStack.size == 0)
+    {
+        printf ("Stack underflow\n");
+        return;
+    }
     stackElem_t poppedValue = GLOBAL_STACK_POISON;
     FargsType* opcode = (FargsType*) (Spu->byteCode + Spu->ip);
 
